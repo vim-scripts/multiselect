@@ -1,9 +1,9 @@
 " multiselect.vim
 " Author: Hari Krishna (hari_vim at yahoo dot com)
-" Last Change: 21-Oct-2004 @ 09:34
+" Last Change: 17-Mar-2005 @ 17:32
 " Created: 21-Jan-2004
 " Requires: Vim-6.2, multvals.vim(3.9), genutils.vim(1.12)
-" Version: 1.2.0
+" Version: 1.3.1
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -64,6 +64,12 @@
 "                                         (MSMatchAdd).
 "     VMatchAddSelection         msv  n,v Add unmatched lines to the selection
 "                                         (MSVMatchAdd).
+"     MatchAddBySynGroup                  Add lines in the specified syntax
+"                                         group to the selection.
+"                                         (MSMatchAddBySynGroup).
+"     VMatchAddBySynGroup                 Add lines not in the specified syntax
+"                                         group to the selection.
+"                                         (MSVMatchAddBySynGroup).
 "
 "     Note that the ex-mode commands that work on selections can also take
 "     arbitrary ranges (see |:range|).
@@ -85,8 +91,17 @@
 "
 "       nnoremap <Enter> :MSAdd<CR>
 "
+"   - The MSMatchAddBySynGroup and MSVMatchAddBySynGroup commands are useful
+"     to automatically select lines based on their syntax group. The syntax
+"     group is checked on the last character of every line in the specified
+"     range and if it is same as the specified syntax group, then the line is
+"     added/removed to/from the new selection. If you want a different column
+"     to be considered for determining the syntax group for lines, then you
+"     can create your own version of these commands easily by using the
+"     MSAddSelectionsByExpr() function as described below.
+"
 "   - To allow other plugins access selections programmatically, the plugin
-"     defines the following global functions (with prototypes):
+"     defines the following global functions (with java-method-like prototypes):
 "
 "         boolean MSSelectionExists()
 "         int     MSNumberOfSelections()
@@ -114,12 +129,30 @@
 "     recommended to check the compatibility by comparing the value of
 "     loaded_multiselect with what is expected. The format of this value is
 "     exactly same as the |v:version|.
+"   - There is also a global function called MSAddSelectionsByExpr() that can
+"     be used to create selections programmatically by using simple
+"     boolean expression. This can be used by users to create additional
+"     commands such as MSMatchAddBySynGroup, but with your own condition. The
+"     function executes the passed in expression for every line, after setting
+"     the current on the line and based on the boolean result, includes or
+"     excludes a line from the lines to be added to selections. The prototype
+"     of this function is:
+"
+"       function! MSAddSelectionsByExpr(int fline, int lline, String expr,
+"                                       boolean negate, ...)
+"
+"     You can pass in additional user arguments to the function, which are
+"     accessible to the expression as a:1, a:2 etc. (see h :function)
 "
 " Ex:
 "   Delete all the lines in the current selections 
 "     MSExecCmd d
 "   Convert all the characters in the current selections to upper case.
 "     MSExecNormalCmd gU
+"   Add all the lines that have "public" to the selection.
+"     MSMatchAdd public
+"   Add all the lines that are in "Comment" syntax group to the selection.
+"     MSMatchAddBySynGroup Comment
 "
 " Installation And Configuration:
 "   - Drop the plugin in a plugin directory under your 'runtimepath'.
@@ -198,7 +231,7 @@ if !exists('loaded_genutils') || loaded_genutils < 112
   echomsg "multiselect: You need a newer version of genutils.vim plugin"
   finish
 endif
-let loaded_multiselect = 101
+let loaded_multiselect = 103
 
 " Initializations {{{
 if !exists('g:multiselTmpMark')
@@ -239,6 +272,10 @@ command! -range=% -nargs=1 MSMatchAdd :call <SID>AddSelectionsByMatch(<line1>,
       \ <line2>, <q-args>, 0)
 command! -range=% -nargs=1 MSVMatchAdd :call <SID>AddSelectionsByMatch(<line1>,
       \ <line2>, <q-args>, 1)
+command! -range=% -nargs=1 MSMatchAddBySynGroup :call
+      \ <SID>AddSelectionsBySynGroup(<line1>, <line2>, <q-args>, 0)
+command! -range=% -nargs=1 MSVMatchAddBySynGroup :call
+      \ <SID>AddSelectionsBySynGroup(<line1>, <line2>, <q-args>, 1)
 
 if (! exists("no_plugin_maps") || ! no_plugin_maps) &&
       \ (! exists("no_multiselect_maps") || ! no_multiselect_maps) " [-2f]
@@ -550,24 +587,40 @@ endfunction " }}}
 
 " Add selection ranges for the matched pattern.
 function! s:AddSelectionsByMatch(fline, lline, pat, negate) " {{{
+  call MSAddSelectionsByExpr(a:fline, a:lline,
+        \ 'match(getline(line(".")), a:1) > -1',
+        \ a:negate, a:pat)
+endfunction " }}}
+
+function! s:AddSelectionsBySynGroup(fline, lline, group, negate) " {{{
+  call MSAddSelectionsByExpr(a:fline, a:lline,
+        \ 'synIDtrans(synID(line("."), strlen(getline(line("."))) - 1, 0)) == hlID(a:1)',
+        \ a:negate, a:group)
+endfunction " }}}
+
+function! MSAddSelectionsByExpr(fline, lline, expr, negate, ...) " {{{
   if ! MSSelectionExists()
     let b:multiselRanges = ''
   endif
+
+  call SaveHardPosition('MSAddSelectionsByExpr')
 
   let i = a:fline
   let cnt = 0
   let newSel = b:multiselRanges
   let fl = -1
   while 1
-    let result = match(getline(i), a:pat)
-    if (!a:negate && result > -1) || (a:negate && result == -1) &&
-          \ (i <= a:lline)
+    exec i | " Position the cursor on the line.
+    exec 'let result = '. a:expr
+    if ((!a:negate && result) || (a:negate && !result)) && (i <= a:lline) &&
+          \ i != line('$')
       if fl == -1
         let fl = i
       endif
     else
       if fl != -1
-        let ll = i - 1
+        " When last line also matches, we want to include it too.
+        let ll = i - (result ? 0 : 1)
         let newSel = MvAddElement(newSel, ':', fl.','.ll)
         let fl = -1
         let cnt = cnt + 1
@@ -582,6 +635,9 @@ function! s:AddSelectionsByMatch(fline, lline, pat, negate) " {{{
     call s:SetSelRanges(newSel)
     MSRefresh
   endif
+
+  call RestoreHardPosition('MSAddSelectionsByExpr')
+  call ResetHardPosition('MSAddSelectionsByExpr')
   echo 'Total selections added: '.cnt
 endfunction " }}}
 
