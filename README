@@ -1,0 +1,46 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=953
+
+This plugin extends the Vim's visual mode functionality by allowing you to
+select non-contiguous regions and execute commands on them. It makes it really
+easy to select multiple regions using mouse, as you can use Ctrl+Mouse
+combination just like in MS Word. There are a number of operations to very
+easily manipulate selections such as modifying the regions
+(add/delete/inverte/clear), hiding, refreshing, saving and restoring etc. You
+can execute both normal and :ex mode commands in one shot on all the regions.
+The selections are also local to the buffer, so you can have separate selectins
+for each buffer.
+
+Usage:
+
+Once installed, the features are available in all the buffers. To create
+selection regions you can use mouse or keyboard.
+    - To use mouse, hold Ctrl key and make a visual selection using the
+      LeftMouse button just like you normally do. Once the mouse button is
+      released, the selection gets automatically added as a new selection
+      region. If you are selecting only one line, you can release the mouse
+      button without having to drag.
+    - To use keyboard, make a visual selection using |visual-mode| commands or
+      mouse and press <Enter> to create a new region out of it. The <Enter> (or
+      <CR>) key is mapped only if it is not already mapped in visual mode. The
+      cursor is placed in the direction of the selection such that it is easier
+      to continue moving the cursor for making further selections.
+    - To clear part or the whole of a region from selection, repeat the
+      same exact procedure over that region. You can however mix mouse and
+      keyboard usage. The procedure is equivalent to running the |:MSInvert|
+      command as describe in |multiselect-commands|.
+    - Once you repeat the procedure to create all the regions that you need to
+      act on, use one of the |:MSExecCmd| or |:MSExecNormalCmd| (or one of their
+      equivalent maps) to execute commands on them. Ex:
+        - Delete all the lines in the current selections >
+            MSExecCmd d
+        - Convert all the characters in the current selections to upper case. >
+            MSExecNormalCmd gU
+    - Use |:MSClear| (or its map) to clear the selection.
+
+
+With the support of multiselect in other plugins, it becomes very useful. E.g., you can execute perfoce commands such as submitting files (using vimscript#240) on a group of selected files, using the multiselect support in selectbuf plugin (vimscript #107). It is possible to extend netrw plugin to support operations on multiple files too.
+
+
+
+
+Search_key_words: multiselect multiple selection select selections mouse hari_vim Hari Krishna Dara
