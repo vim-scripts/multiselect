@@ -1,12 +1,14 @@
 " multiselect.vim
 " Author: Hari Krishna (hari_vim at yahoo dot com)
-" Last Change: 20-Oct-2004 @ 14:47
+" Last Change: 21-Oct-2004 @ 09:34
 " Created: 21-Jan-2004
 " Requires: Vim-6.2, multvals.vim(3.9), genutils.vim(1.12)
-" Version: 1.1.1
+" Version: 1.2.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
+" Download From:
+"     http://www.vim.org/script.php?script_id=953
 " Acknowledgements:
 "   - This plugin is based on the multipleRanges.vim script (vimscript#352)
 "     version 1.7 by Salman Halim (salmanhalim at hotmail dot com). I first
@@ -18,19 +20,17 @@
 "     any code that you would see as same, except that it still has some
 "     structural similarity), I give a lot of credit to Salman Halim for the
 "     original ideas and to get me quickly started with this new plugin.
-" Download From:
-"     http://www.vim.org/script.php?script_id=953
+"
 " Description:
 "   - This plugin extends the Vim's visual mode functionality by allowing you
 "     to define multiple selections before executing a command on them.
 "   - Currently it is limited to the visual-by-line mode. There are other
 "     limitations that exist, e.g., the selection is remembered by line
 "     numbers, so insertions and deletions above the selections will not be
-"     automatically taken care oflinsertions and deletions above the
-"     selections will not be automatically taken care of.
+"     automatically taken care of.
 "   - Here is a set of mappings (with applicable modes) and the equivalent
 "     command that this plugin defines for each operation (for brevity, names
-"     do not exclude the common prefix of <Plug>MS and defaults do not include
+"     do not include the common prefix of <Plug>MS and defaults do not include
 "     the common prefix of <Leader>):
 "
 "     Mapping Name               Default  Description~
@@ -226,7 +226,7 @@ command! MSDelete :call <SID>DeleteSelection()
 command! -range=% MSClear :call <SID>ClearSelection(<line1>, <line2>)
 command! MSRestore :call <SID>RestoreSelections()
 command! MSRefresh :call <SID>RefreshSelections()
-command! -range=% MSInvert :call <SID>InvertSelections(<line1>, <line2>)
+command! -range MSInvert :call <SID>InvertSelections(<line1>, <line2>)
 command! MSHide :call <SID>HideSelections()
 command! -nargs=1 -complete=command MSExecCmd
       \ :call <SID>ExecCmdOnSelection(<q-args>, 0)
@@ -245,11 +245,13 @@ if (! exists("no_plugin_maps") || ! no_plugin_maps) &&
 
 if (! exists("no_multiselect_mousemaps") || ! no_multiselect_mousemaps)
   exec 'noremap <silent> <'.g:multiselMouseSelAddMod.
-        \ 'LeftMouse> <'.g:multiselMouseSelAddKey.'Mouse><Esc>V'
+        \ g:multiselMouseSelAddKey.'Mouse> '.
+        \ '<'.g:multiselMouseSelAddKey.'Mouse><Esc>V'
   exec 'noremap <silent> <'.g:multiselMouseSelAddMod.
-        \ 'LeftDrag> <'.g:multiselMouseSelAddKey.'Drag>'
+        \ g:multiselMouseSelAddKey.'Drag> <'.g:multiselMouseSelAddKey.'Drag>'
   exec 'noremap <silent> <'.g:multiselMouseSelAddMod.
-        \ 'LeftRelease> :MSAdd<CR><'.g:multiselMouseSelAddKey.'Release>'
+        \ g:multiselMouseSelAddKey.'Release> '.
+        \ ':MSInvert<CR><'.g:multiselMouseSelAddKey.'Release>'
 endif
 
 if maparg('<Enter>', 'v') == ''
@@ -413,12 +415,12 @@ function! s:DeleteSelection() " {{{
   endif
 endfunction " }}}
 
-function! s:RestoreSelections()
+function! s:RestoreSelections()"{{{
   if exists('b:_multiselRanges')
     let b:multiselRanges = b:_multiselRanges
     MSRefresh
   endif
-endfunction
+endfunction"}}}
 
 function! s:IsSelectionHidden() " {{{
   if exists('b:multiselHidden') && b:multiselHidden
@@ -485,62 +487,59 @@ function! s:DrawSelections() " {{{
 endfunction " }}}
 
 function! s:InvertSelections(fline, lline) " {{{
-  if !MSSelectionExists()
-    let invSel = '1,'.line('$')
-  else
-    call s:ConsolidateSelections()
+  call s:ConsolidateSelections()
 
-    let curSel = ''
-    let nexSel = ''
-    let invSel = ''
-    let intersectedAny = 0
-    " To track ranges that are across multiple selections, we need a dynamic
-    " range.
-    let fline = a:fline
-    let lline = a:lline
-    let nextfl = fline
-    let nextll = lline
-    call MvIterCreate(b:multiselRanges, ':', 'MultiSelect')
-    while MvIterHasNext('MultiSelect')
-      let curSel = MvIterNext('MultiSelect')
-      let selfl = MSFL(curSel)
-      let selll = MSLL(curSel)
-      if selll < fline || selfl > lline
-        " No intersection.
-        let invSel = MvAddElement(invSel, ':', curSel)
-        continue
-      endif
-      " FIXME: Check if the selections went beyond the range and skip this
-      " (optimization).
-      let intersectedAny = 1
-
-      let nexSel = MvIterPeek('MultiSelect')
-      " If the range spawns across multiple selections, we need to handle it.
-      if nexSel != '' && lline >= MSFL(nexSel)
-        let nextfl = MSFL(nexSel)
-        let nextll = lline
-        let lline = MSFL(nexSel) - 1
-      endif
-
-      let pt1 = s:Min(selfl, fline)
-      let pt2 = s:Max(selfl, fline)
-      let pt3 = s:Min(selll, lline)
-      let pt4 = s:Max(selll, lline)
-      if pt1 != pt2
-        let invSel = MvAddElement(invSel, ':', pt1.','.(pt2 - 1))
-      endif
-      if pt3 != pt4
-        let invSel = MvAddElement(invSel, ':', (pt3 + 1).','.pt4)
-      endif
-
-      let fline = nextfl
-      let lline = nextll
-    endwhile
-    call MvIterDestroy('MultiSelect')
-    if !intersectedAny
-      let invSel = MvAddElement(invSel, ':', fline.','.lline)
+  let curSel = ''
+  let nexSel = ''
+  let invSel = ''
+  let intersectedAny = 0
+  " To track ranges that are across multiple selections, we need a dynamic
+  " range.
+  let fline = a:fline
+  let lline = a:lline
+  let nextfl = fline
+  let nextll = lline
+  call MvIterCreate(b:multiselRanges, ':', 'MultiSelect')
+  while MvIterHasNext('MultiSelect')
+    let curSel = MvIterNext('MultiSelect')
+    let selfl = MSFL(curSel)
+    let selll = MSLL(curSel)
+    if selll < fline || selfl > lline
+      " No intersection.
+      let invSel = MvAddElement(invSel, ':', curSel)
+      continue
     endif
+    " FIXME: Check if the selections went beyond the range and skip this
+    " (optimization).
+    let intersectedAny = 1
+
+    let nexSel = MvIterPeek('MultiSelect')
+    " If the range spawns across multiple selections, we need to handle it.
+    if nexSel != '' && lline >= MSFL(nexSel)
+      let nextfl = MSFL(nexSel)
+      let nextll = lline
+      let lline = MSFL(nexSel) - 1
+    endif
+
+    let pt1 = s:Min(selfl, fline)
+    let pt2 = s:Max(selfl, fline)
+    let pt3 = s:Min(selll, lline)
+    let pt4 = s:Max(selll, lline)
+    if pt1 != pt2
+      let invSel = MvAddElement(invSel, ':', pt1.','.(pt2 - 1))
+    endif
+    if pt3 != pt4
+      let invSel = MvAddElement(invSel, ':', (pt3 + 1).','.pt4)
+    endif
+
+    let fline = nextfl
+    let lline = nextll
+  endwhile
+  call MvIterDestroy('MultiSelect')
+  if !intersectedAny
+    let invSel = MvAddElement(invSel, ':', fline.','.lline)
   endif
+
   if invSel == ''
     MSClear
   else
