@@ -1,9 +1,9 @@
 " multiselect.vim
 " Author: Hari Krishna (hari_vim at yahoo dot com)
-" Last Change: 16-Mar-2004 @ 19:40
+" Last Change: 20-Oct-2004 @ 14:47
 " Created: 21-Jan-2004
-" Requires: Vim-6.2, multvals.vim(3.4), genutils.vim(1.10)
-" Version: 1.0.4
+" Requires: Vim-6.2, multvals.vim(3.9), genutils.vim(1.12)
+" Version: 1.1.1
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -19,7 +19,7 @@
 "     structural similarity), I give a lot of credit to Salman Halim for the
 "     original ideas and to get me quickly started with this new plugin.
 " Download From:
-"     http://www.vim.org/script.php?script_id=
+"     http://www.vim.org/script.php?script_id=953
 " Description:
 "   - This plugin extends the Vim's visual mode functionality by allowing you
 "     to define multiple selections before executing a command on them.
@@ -36,6 +36,8 @@
 "     Mapping Name               Default  Description~
 "     AddSelection               msa  n,v Add current selection to the
 "                                         selection list (MSAdd).
+"                                <CR> v   if unused.
+"                          Ctrl+LeftMouse Make multiple selections using mouse.
 "     DeleteSelection            msd  n   Delete current selection (MSDelete).
 "     ClearSelection             msc  n,v Clear selections in the given range or
 "                                         the entire buffer (MSClear).
@@ -65,6 +67,23 @@
 "
 "     Note that the ex-mode commands that work on selections can also take
 "     arbitrary ranges (see |:range|).
+"
+"   - To make it easier and quicker to add selections, the plugin unless
+"     disabled by setting the g:no_multiselect_mousemaps, map the Ctrl+Mouse
+"     combination to automatically add the current selection and start a new
+"     one. Just keep the Ctrl key pressed and use left mouse to make
+"     selections. If you are selecting single lines you don't even need to
+"     drag mouse.
+"
+"     If you instead use keyboard to create visual selections, the plugin
+"     automatically maps <Enter> (if it is not already mapped) such that you
+"     can just press <Enter> to add the current selection. The cursor is
+"     placed in the direction of the selection such that it is easier to
+"     continue moving the cursor for making further selections. If you prefer,
+"     you can also add the following mapping in your vimrc to use <Enter> key
+"     to quickly make multiple single-line selections.
+"
+"       nnoremap <Enter> :MSAdd<CR>
 "
 "   - To allow other plugins access selections programmatically, the plugin
 "     defines the following global functions (with prototypes):
@@ -102,7 +121,7 @@
 "   Convert all the characters in the current selections to upper case.
 "     MSExecNormalCmd gU
 "
-" Installation:
+" Installation And Configuration:
 "   - Drop the plugin in a plugin directory under your 'runtimepath'.
 "   - Install the dependent multvals and genutils plugins.
 "   - Configure any key bindings in the above table.
@@ -129,13 +148,30 @@
 "   - If you feel that the default mappings defined by the plugin are too
 "     long, consider installing execmap.vim plugin from vim.org scripts
 "     section.
+"   - If you would like to change the modifiers that are used to add
+"     selections through mouse (from the default Alt(or Meta)), use
+"     g:multiselMouseSelAddMod variable. E.g. to use Alt+Shift (or Meta+Shift)
+"     as the modifiers,
+"
+"       let g:multiselMouseSelAddMod = 'M-S-'
+"
+"     You can also change the mouse key that is to be used (Right instead of
+"     Left, e.g.) by setting the g:multiselMouseSelAddKey variable. E.g. to
+"     use Alt+RightMouse, you would set:
+"
+"       let g:multiselMouseSelAddMod = 'M-'
+"       let g:multiselMouseSelAddKey = 'Right'
+"
+"     Of course, you could also remove the need to press modifiers by
+"     setting g:multiselMouseSelAddMod to an empty string. You will then
+"     essentially replace the normal Vim selection mechanism with that of the
+"     plugin (not advisable if you use Vim's v and ^V modes very much).
 " TODO:
 "   - While executing commands on multiple ranges, there should be a way
-"     to execute at least normal commands on each line instead of each range
-"     (useful for running on plugin windows).
+"     to execute at least normal commands on each line in the range instead of
+"     each range (useful for running on plugin windows).
 "   - Implement yank and paste selections (\msy, \msp), but how should they
-"     work?
-"   - visual-<M-LeftMouse> to add selection?
+"     really work?
 "   - Support different visual modes. The block mode could be quite
 "     complicated to implement.
 
@@ -143,7 +179,7 @@ if exists('loaded_multiselect')
   finish
 endif
 if v:version < 602
-  echomsg 'You need Vim 6.2 to run this version of multiselect.vim.'
+  echomsg 'multiselect: You need at least Vim 6.2'
   finish
 endif
 
@@ -151,18 +187,18 @@ endif
 if !exists('loaded_multvals')
   runtime plugin/multvals.vim
 endif
-if !exists('loaded_multvals') || loaded_multvals < 304
+if !exists('loaded_multvals') || loaded_multvals < 309
   echomsg "multiselect: You need a newer version of multvals.vim plugin"
   finish
 endif
 if !exists('loaded_genutils')
   runtime plugin/genutils.vim
 endif
-if !exists('loaded_genutils') || loaded_genutils < 110
+if !exists('loaded_genutils') || loaded_genutils < 112
   echomsg "multiselect: You need a newer version of genutils.vim plugin"
   finish
 endif
-let loaded_multiselect = 100
+let loaded_multiselect = 101
 
 " Initializations {{{
 if !exists('g:multiselTmpMark')
@@ -175,6 +211,14 @@ endif
 
 if !exists('g:multiselAbortOnErrors')
   let g:multiselAbortOnErrors = 1
+endif
+
+if !exists('g:multiselMouseSelAddMod')
+  let g:multiselMouseSelAddMod = 'C-'
+endif
+
+if !exists('g:multiselMouseSelAddKey')
+  let g:multiselMouseSelAddKey = 'Left'
 endif
 
 command! -range MSAdd :call <SID>AddSelection(<line1>, <line2>)
@@ -199,34 +243,47 @@ command! -range=% -nargs=1 MSVMatchAdd :call <SID>AddSelectionsByMatch(<line1>,
 if (! exists("no_plugin_maps") || ! no_plugin_maps) &&
       \ (! exists("no_multiselect_maps") || ! no_multiselect_maps) " [-2f]
 
+if (! exists("no_multiselect_mousemaps") || ! no_multiselect_mousemaps)
+  exec 'noremap <silent> <'.g:multiselMouseSelAddMod.
+        \ 'LeftMouse> <'.g:multiselMouseSelAddKey.'Mouse><Esc>V'
+  exec 'noremap <silent> <'.g:multiselMouseSelAddMod.
+        \ 'LeftDrag> <'.g:multiselMouseSelAddKey.'Drag>'
+  exec 'noremap <silent> <'.g:multiselMouseSelAddMod.
+        \ 'LeftRelease> :MSAdd<CR><'.g:multiselMouseSelAddKey.'Release>'
+endif
+
+if maparg('<Enter>', 'v') == ''
+  vnoremap <Enter> m`:MSAdd<Enter>``
+endif
+
 function! s:AddMap(name, map, cmd, mode, silent)
   if (!hasmapto('<Plug>MS'.a:name, a:mode))
     exec a:mode.'map <unique> <Leader>'.a:map.' <Plug>MS'.a:name
   endif
   exec a:mode.'map '.(a:silent?'<silent> ':'').'<script> <Plug>MS'.a:name.
-        \ ' :'.a:cmd
+        \ ' '.a:cmd
 endfunction
 
-call s:AddMap('AddSelection', 'msa', 'MSAdd<CR>', 'v', 1)
-call s:AddMap('AddSelection', 'msa', 'MSAdd<CR>', 'n', 1)
-call s:AddMap('DeleteSelection', 'msd', 'MSDelete<CR>', 'n', 1)
-call s:AddMap('ClearSelection', 'msc', 'MSClear<CR>', 'v', 1)
-call s:AddMap('ClearSelection', 'msc', 'MSClear<CR>', 'n', 1)
-call s:AddMap('RestoreSelections', 'msr', 'MSRestore<CR>', 'n', 1)
-call s:AddMap('RefreshSelections', 'msf', 'MSRefresh<CR>', 'n', 1)
-call s:AddMap('HideSelections', 'msh', 'MSHide<CR>', 'n', 1)
-call s:AddMap('InvertSelections', 'msi', 'MSInvert<CR>', 'n', 1)
-call s:AddMap('InvertSelections', 'msi', 'MSInvert<CR>', 'v', 1)
-call s:AddMap('ShowSelections', 'mss', 'MSShow<CR>', 'n', 1)
-call s:AddMap('NextSelection', 'ms]', 'MSNext<CR>', 'n', 1)
-call s:AddMap('PrevSelection', 'ms[', 'MSPrev<CR>', 'n', 1)
-call s:AddMap('ExecCmdOnSelection', 'ms:', 'MSExecCmd<Space>', 'n', 0)
-call s:AddMap('ExecNormalCmdOnSelection', 'msn', 'MSExecNormalCmd<Space>', 'n',
+call s:AddMap('AddSelection', 'msa', 'm`:MSAdd<CR>``', 'v', 1)
+call s:AddMap('AddSelection', 'msa', ':MSAdd<CR>', 'n', 1)
+call s:AddMap('DeleteSelection', 'msd', ':MSDelete<CR>', 'n', 1)
+call s:AddMap('ClearSelection', 'msc', ':MSClear<CR>', 'v', 1)
+call s:AddMap('ClearSelection', 'msc', ':MSClear<CR>', 'n', 1)
+call s:AddMap('RestoreSelections', 'msr', ':MSRestore<CR>', 'n', 1)
+call s:AddMap('RefreshSelections', 'msf', ':MSRefresh<CR>', 'n', 1)
+call s:AddMap('HideSelections', 'msh', ':MSHide<CR>', 'n', 1)
+call s:AddMap('InvertSelections', 'msi', ':MSInvert<CR>', 'n', 1)
+call s:AddMap('InvertSelections', 'msi', ':MSInvert<CR>', 'v', 1)
+call s:AddMap('ShowSelections', 'mss', ':MSShow<CR>', 'n', 1)
+call s:AddMap('NextSelection', 'ms]', ':MSNext<CR>', 'n', 1)
+call s:AddMap('PrevSelection', 'ms[', ':MSPrev<CR>', 'n', 1)
+call s:AddMap('ExecCmdOnSelection', 'ms:', ':MSExecCmd<Space>', 'n', 0)
+call s:AddMap('ExecNormalCmdOnSelection', 'msn', ':MSExecNormalCmd<Space>', 'n',
       \ 0)
-call s:AddMap('MatchAddSelection', 'msm', 'MSMatchAdd<Space>', 'v', 0)
-call s:AddMap('MatchAddSelection', 'msm', 'MSMatchAdd<Space>', 'n', 0)
-call s:AddMap('VMatchAddSelection', 'msv', 'MSVMatchAdd<Space>', 'v', 0)
-call s:AddMap('VMatchAddSelection', 'msv', 'MSVMatchAdd<Space>', 'n', 0)
+call s:AddMap('MatchAddSelection', 'msm', ':MSMatchAdd<Space>', 'v', 0)
+call s:AddMap('MatchAddSelection', 'msm', ':MSMatchAdd<Space>', 'n', 0)
+call s:AddMap('VMatchAddSelection', 'msv', ':MSVMatchAdd<Space>', 'v', 0)
+call s:AddMap('VMatchAddSelection', 'msv', ':MSVMatchAdd<Space>', 'n', 0)
 
 delf s:AddMap
 endif
@@ -241,9 +298,6 @@ aug MultiSelect
   au WinLeave * :call <SID>DrawSelections()
   au WinEnter * :call <SID>DrawSelections()
 aug END
-
-" The highlight scheme to show the selection.
-hi default MultiSelections gui=reverse term=reverse cterm=reverse
 
 let s:inExecution = 0
 " Initializations }}}
@@ -264,14 +318,14 @@ function! s:AddSelection(fline, lline) " {{{
   endif
 endfunction " }}}
 
-function! s:ClearSelection(ffline, lline) " {{{
+function! s:ClearSelection(fline, lline) " {{{
   if !MSSelectionExists()
     return
   endif
 
   " When the range refers to the entire file or when MSClear is executed with
   " '%' as range.
-  if a:ffline == 1 && a:lline == line('$')
+  if a:fline == 1 && a:lline == line('$')
     call s:_hideSelections()
     call s:SetSelRanges('')
   else
@@ -285,10 +339,10 @@ function! s:ClearSelection(ffline, lline) " {{{
       let fl = MSFL(curSel)
       let ll = MSLL(curSel)
       " Check if this selection intersects with what needs to be deleted.
-      if      (fl >= a:ffline) && (fl <= a:lline) ||
-            \ (a:ffline >= fl) && (a:ffline <= ll)
-        let pt1 = s:Min(fl, a:ffline)
-        let pt2 = s:Max(fl, a:ffline)
+      if      (fl >= a:fline) && (fl <= a:lline) ||
+            \ (a:fline >= fl) && (a:fline <= ll)
+        let pt1 = s:Min(fl, a:fline)
+        let pt2 = s:Max(fl, a:fline)
         let pt3 = s:Min(ll, a:lline)
         let pt4 = s:Max(ll, a:lline)
         if pt1 != pt2 && fl == pt1
@@ -339,7 +393,15 @@ function! s:DeleteSelection() " {{{
   if curSelSt != ''
     let sel = MvElementLike(b:multiselRanges, ':', curSelSt.',\d\+')
     " Remove only if the cursor is in the selection.
-    if MSLL(sel) >= line('.') 
+    if sel != '' && !(MSFL(sel) <= line('.') && MSLL(sel) >= line('.'))
+      " Check if the next selection is in the range.
+      let index = MvIndexOfElement(b:multiselRanges, ':', sel)
+      let sel = MvElementAt(b:multiselRanges, ':', index+1)
+      if sel != '' && !(MSFL(sel) <= line('.') && MSLL(sel) >= line('.'))
+        let sel = '' " No matching selection.
+      endif
+    endif
+    if sel != ''
       let newSel = MvRemoveElement(b:multiselRanges, ':', sel)
       if newSel == ''
         MSClear
@@ -428,40 +490,56 @@ function! s:InvertSelections(fline, lline) " {{{
   else
     call s:ConsolidateSelections()
 
-    let i = 0
-    let j = 0
-    let fl = a:fline
     let curSel = ''
+    let nexSel = ''
     let invSel = ''
+    let intersectedAny = 0
+    " To track ranges that are across multiple selections, we need a dynamic
+    " range.
+    let fline = a:fline
+    let lline = a:lline
+    let nextfl = fline
+    let nextll = lline
     call MvIterCreate(b:multiselRanges, ':', 'MultiSelect')
-    while MvIterHasNext('MultiSelect') && fl <= a:lline
+    while MvIterHasNext('MultiSelect')
       let curSel = MvIterNext('MultiSelect')
       let selfl = MSFL(curSel)
       let selll = MSLL(curSel)
-      if selll < a:fline || selfl > a:lline
+      if selll < fline || selfl > lline
+        " No intersection.
         let invSel = MvAddElement(invSel, ':', curSel)
         continue
       endif
+      " FIXME: Check if the selections went beyond the range and skip this
+      " (optimization).
+      let intersectedAny = 1
 
-      if selfl > a:lline
-        let newll = a:lline
-      else
-        let newll = selfl - 1
+      let nexSel = MvIterPeek('MultiSelect')
+      " If the range spawns across multiple selections, we need to handle it.
+      if nexSel != '' && lline >= MSFL(nexSel)
+        let nextfl = MSFL(nexSel)
+        let nextll = lline
+        let lline = MSFL(nexSel) - 1
       endif
-      if selll < a:fline
-        let newfl = selll + 1
-      else
-        let newfl = fl
+
+      let pt1 = s:Min(selfl, fline)
+      let pt2 = s:Max(selfl, fline)
+      let pt3 = s:Min(selll, lline)
+      let pt4 = s:Max(selll, lline)
+      if pt1 != pt2
+        let invSel = MvAddElement(invSel, ':', pt1.','.(pt2 - 1))
       endif
-      if newll >= newfl
-        let invSel = MvAddElement(invSel, ':', newfl.','.newll)
+      if pt3 != pt4
+        let invSel = MvAddElement(invSel, ':', (pt3 + 1).','.pt4)
       endif
-      let fl = MSLL(curSel) + 1
+
+      let fline = nextfl
+      let lline = nextll
     endwhile
-    if fl <= a:lline
-      let invSel = MvAddElement(invSel, ':', fl.','.a:lline)
-    endif
     call MvIterDestroy('MultiSelect')
+    if !intersectedAny
+      let invSel = MvAddElement(invSel, ':', fline.','.lline)
+    endif
   endif
   if invSel == ''
     MSClear
@@ -623,6 +701,12 @@ function! s:MatchRanges() " {{{
   if s:IsSelectionHidden()
     return
   endif
+
+  " CUATION: This should typically be done only once, as part of the plugin
+  "   startup, but some plugins like SpellChecker.vim when turned off, remove
+  "   all highlighting groups, so it is better that we do this everytime.  The
+  "   highlight scheme to show the selection.
+  hi default MultiSelections gui=reverse term=reverse cterm=reverse
 
   let matchPat = substitute(substitute(b:multiselRanges, ':$', '', ''),
         \ '\(^\|:\)\(\d\+\),\(\d\+\)',
