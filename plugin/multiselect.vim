@@ -1,9 +1,9 @@
 " multiselect.vim: multiple persistent selections
 " Author: Hari Krishna (hari_vim at yahoo dot com)
 " Last Change: 24-May-2006 @ 15:32
-" Created: 21-Jan-2004
+" Created: 08-Sep-2006 @ 22:17
 " Requires: Vim-7.0, genutils.vim(2.0)
-" Version: 2.1.1
+" Version: 2.2.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -30,7 +30,7 @@ if !exists('loaded_genutils') || loaded_genutils < 200
   echomsg "multiselect: You need a newer version of genutils.vim plugin"
   finish
 endif
-let loaded_multiselect = 201
+let loaded_multiselect = 202
 
 " Initializations {{{
 

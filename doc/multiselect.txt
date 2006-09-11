@@ -1,20 +1,22 @@
 *multiselect.txt*  Create multiple selections and operate
                     Requires Vim 7.0
-            Last Change: 01-Sep-2006 @ 16:54
+            Last Change: 08-Sep-2006 @ 22:18
           Since Version: 2.0
                Revision: 1.0.0
-         Plugin Version: 2.0
+         Plugin Version: 2.2
                  Author: Hari Krishna Dara (hari_vim at yahoo dot com)
 
                                             *multiselect-introduction*
                                             *multiselect-plugin*
-This plugin extends the Vim's visual mode functionality by allowing you
-to select non-contiguous regions and execute commands on them. To make it
-really easy to select multiple regions, the Ctrl+Mouse combination can be used
-(like in MS Word). There are a number of operations to very easily manipulated
-selections such as modifying the regions (adding/deleting/inverting/clearing
-etc.), hiding, refreshing, saving and restoring etc. You can execute both
-normal and :ex mode commands in one shot on all the regions.
+This plugin extends the Vim's visual mode functionality by allowing you to
+select non-contiguous regions and execute commands on them. It makes it really
+easy to select multiple regions using mouse, as you can use Ctrl+Mouse
+combination just like in MS Word. There are a number of operations to very
+easily manipulate selections such as modifying the regions
+(add/delete/inverte/clear), hiding, refreshing, saving and restoring etc. You
+can execute both normal and :ex mode commands in one shot on all the regions.
+The selections are also local to the buffer, so you can have separate selectins
+for each buffer.
 
 ==============================================================================
 OVERVIEW                                    *multiselect-overview*
@@ -188,6 +190,7 @@ using the MSAddSelectionsByExpr() function as described below. Ex:
 
     hi MultiSelections guifg=grey90 guibg=black
 <
+  This setting is used only if have |multiselUseSynHi| set.
                                             *no_multiselect_mousemaps*
 - To disable mouse mappings without disabling the rest, use
   g:no_multiselect_mousemaps setting.
@@ -240,25 +243,25 @@ using the MSAddSelectionsByExpr() function as described below. Ex:
   defines the following global functions (with java-method-like prototypes):
 
       " Number of selections that exist in the current buffer.
-      int     multiselect#NumberOfSelections()
+      int     MSNumberOfSelections()
       " Returns true if there are any selections made.
-      boolean multiselect#SelectionExists()
+      boolean MSSelectionExists()
       " First line in the given selection.
-      int     multiselect#FL(List sel)
+      int     MSFL(List sel)
       " Last line in the given selection.
-      int     multiselect#LL(List sel)
+      int     MSLL(List sel)
       " Returns the selections for the current buffer. The selections can also
       "   be accessed directly in b:multiselRanges, but it is safer to use this
       "   function.
-      List    multiselect#GetSelections()
+      List    MSGetSelections()
       " If the plugin is currently executing a command on the selection. Useful
       "   for code that can be executed recursively (autocommands etc.)
-      boolean multiselect#IsExecuting()
+      boolean MSIsExecuting()
       " Return the index of the selection containing the linenr. For dir pass:
       "   0 - Find the selection containing the line.
       "   1 - Find the next selection.
       "  -1 - Find the previous selection.
-      int     multiselect#FindSelection(linenr, dir)
+      int     MSFindSelection(linenr, dir)
 
 The selections are stored as a Vim7 List in the buffer local variable called
 b:multiselRanges (which may not exist if there are no selections yet in the
@@ -328,6 +331,11 @@ accessible to the expression as a:1, a:2 etc. (see |:function|)
 ==============================================================================
 
                                             *multiselect-changes*
+
+                                            *multiselect-changes-2.1*
+- Changed public API to not autoload script. It doesn't make sense for public
+  API to load the script if it is not already loaded. This will also cause
+  problems when the plugin is disabled, but other plugins try to use it.
 
                                             *multiselect-changes-2.0*
 - All the functionality has been rewritten to take advantage of new Vim7

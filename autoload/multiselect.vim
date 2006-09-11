@@ -17,7 +17,7 @@ let s:inExecution = 0
 " Initializations }}}
 
 function! multiselect#AddSelection(fline, lline) " {{{
-  call s:SetSelRanges(add(copy(multiselect#GetSelections()), [a:fline, a:lline]))
+  call s:SetSelRanges(add(copy(MSGetSelections()), [a:fline, a:lline]))
 
   if g:multiselUseSynHi
     call s:HighlightRange(a:fline, a:lline)
@@ -27,7 +27,7 @@ function! multiselect#AddSelection(fline, lline) " {{{
 endfunction " }}}
 
 function! multiselect#ClearSelection(fline, lline) " {{{
-  if !multiselect#SelectionExists()
+  if !MSSelectionExists()
     return
   endif
 
@@ -38,9 +38,9 @@ function! multiselect#ClearSelection(fline, lline) " {{{
     call s:SetSelRanges([])
   else
     let newSel = []
-    for curSel in multiselect#GetSelections()
-      let fl = multiselect#FL(curSel)
-      let ll = multiselect#LL(curSel)
+    for curSel in MSGetSelections()
+      let fl = MSFL(curSel)
+      let ll = MSLL(curSel)
       " Check if this selection intersects with what needs to be deleted.
       if      (fl >= a:fline) && (fl <= a:lline) ||
             \ (a:fline >= fl) && (a:fline <= ll)
@@ -70,10 +70,10 @@ function! multiselect#ClearSelection(fline, lline) " {{{
 endfunction " }}}
 
 function! multiselect#ShowSelections() " {{{
-  if multiselect#SelectionExists()
-    for sel in multiselect#GetSelections()
-      let nLines = ((multiselect#LL(sel) - multiselect#FL(sel)) + 1)
-      echo multiselect#FL(sel).','.multiselect#LL(sel) '(' . nLines 'lines)'
+  if MSSelectionExists()
+    for sel in MSGetSelections()
+      let nLines = ((MSLL(sel) - MSFL(sel)) + 1)
+      echo MSFL(sel).','.MSLL(sel) '(' . nLines 'lines)'
     endfor
   endif
 endfunction " }}}
@@ -81,7 +81,7 @@ endfunction " }}}
 function! multiselect#DeleteSelection() " {{{
   let selIdx = s:FindSelection(line('.'), 0)
   if (selIdx != -1)
-    let newSel = copy(multiselect#GetSelections())
+    let newSel = copy(MSGetSelections())
     call remove(newSel, selIdx)
     if len(newSel) == 0
       MSClear
@@ -108,7 +108,7 @@ function! s:IsSelectionHidden() " {{{
 endfunction " }}}
 
 function! multiselect#HideSelections() " {{{
-  if !multiselect#SelectionExists() || s:IsSelectionHidden()
+  if !MSSelectionExists() || s:IsSelectionHidden()
     return
   endif
 
@@ -134,7 +134,7 @@ function! multiselect#RefreshSelections() " {{{
   MSHide
 
   let b:multiselHidden = 0
-  if !multiselect#SelectionExists()
+  if !MSSelectionExists()
     return
   endif
 
@@ -142,15 +142,15 @@ function! multiselect#RefreshSelections() " {{{
 endfunction }}}
 
 function! s:DrawSelections() " {{{
-  if !multiselect#SelectionExists() || s:IsSelectionHidden()
+  if !MSSelectionExists() || s:IsSelectionHidden()
     return
   endif
 
   call genutils#SaveHardPosition('RefreshSelections')
 
   if g:multiselUseSynHi
-    for sel in multiselect#GetSelections()
-      call s:HighlightRange(multiselect#FL(sel), multiselect#LL(sel))
+    for sel in MSGetSelections()
+      call s:HighlightRange(MSFL(sel), MSLL(sel))
     endfor
   else
     call s:MatchRanges()
@@ -171,10 +171,10 @@ function! multiselect#InvertSelections(fline, lline) " {{{
   let nextfl = fline
   let nextll = lline
   let i = -1
-  for curSel in multiselect#GetSelections()
+  for curSel in MSGetSelections()
     let i = i + 1
-    let selfl = multiselect#FL(curSel)
-    let selll = multiselect#LL(curSel)
+    let selfl = MSFL(curSel)
+    let selll = MSLL(curSel)
     if selll < fline || selfl > lline
       " No intersection.
       call add(invSel, curSel)
@@ -187,10 +187,10 @@ function! multiselect#InvertSelections(fline, lline) " {{{
     if ((len(b:multiselRanges)-1) > i)
       let nexSel = b:multiselRanges[i+1]
       " If the range spawns across multiple selections, we need to handle it.
-      if lline >= multiselect#FL(nexSel)
-        let nextfl = multiselect#FL(nexSel)
+      if lline >= MSFL(nexSel)
+        let nextfl = MSFL(nexSel)
         let nextll = lline
-        let lline = multiselect#FL(nexSel) - 1
+        let lline = MSFL(nexSel) - 1
       endif
     endif
 
@@ -279,7 +279,7 @@ function! multiselect#AddSelectionsByExpr(fline, lline, expr, negate, ...) " {{{
 endfunction " }}}
 
 function! multiselect#ExecCmdOnSelection(theCommand, normalMode) " {{{
-  if !multiselect#SelectionExists()
+  if !MSSelectionExists()
     return
   endif
 
@@ -287,9 +287,9 @@ function! multiselect#ExecCmdOnSelection(theCommand, normalMode) " {{{
   let bufNr = bufnr('%') + 0 
   let saveMarkPos = getpos("'t")
   try
-    for curSel in multiselect#GetSelections()
-      let fl = multiselect#FL(curSel) + offset
-      let ll = multiselect#LL(curSel) + offset
+    for curSel in MSGetSelections()
+      let fl = MSFL(curSel) + offset
+      let ll = MSLL(curSel) + offset
       if ll != line('$')
         exec (ll+1).'mark t'
       endif
@@ -352,13 +352,13 @@ function! s:ConsolidateSelections() " {{{
       continue " Ignore duplicate.
     endif
 
-    if multiselect#LL(prevSel) >= (multiselect#FL(curSel) - 1)
+    if MSLL(prevSel) >= (MSFL(curSel) - 1)
       " Next selection is with in the current selection range, ignore.
-      if multiselect#LL(curSel) <= multiselect#LL(prevSel)
+      if MSLL(curSel) <= MSLL(prevSel)
         continue
       endif
       " echo "Consolidating " . prevSel . " and " . curSel
-      let prevSel = [multiselect#FL(prevSel), multiselect#LL(curSel)]
+      let prevSel = [MSFL(prevSel), MSLL(curSel)]
       let numConsolidations += 1
     else
       call add(consoldSel, prevSel)
@@ -393,7 +393,7 @@ function! s:MatchRanges() " {{{
   " The highlight scheme to show the selection.
   hi default MultiSelections gui=reverse term=reverse cterm=reverse
 
-  let matchPat = join(map(copy(multiselect#GetSelections()),
+  let matchPat = join(map(copy(MSGetSelections()),
         \ '"\\%>".(v:val[0]-1)."l\\%<".(v:val[1]+1)."l"'), '\|')
   execute "match MultiSelections '".matchPat."'"
 endfunction " }}}
@@ -403,9 +403,9 @@ function! s:SortSelections()
 endfunction
 
 function! s:CompareSelection(sel1, sel2)
-  if multiselect#FL(a:sel1) < multiselect#FL(a:sel2)
+  if MSFL(a:sel1) < MSFL(a:sel2)
     return -1
-  elseif multiselect#FL(a:sel1) > multiselect#FL(a:sel2)
+  elseif MSFL(a:sel1) > MSFL(a:sel2)
     return 1
   else
     return 0
@@ -417,18 +417,18 @@ endfunction
 "   1 - Find the next selection.
 "  -1 - Find the previous selection.
 function! s:FindSelection(linenr, dir)
-  if multiselect#SelectionExists()
+  if MSSelectionExists()
     let i = 0
-    for sel in multiselect#GetSelections()
+    for sel in MSGetSelections()
       " Selection containing line.
-      if a:dir == 0 && (multiselect#FL(sel) <= a:linenr &&
-            \ multiselect#LL(sel) >= a:linenr)
+      if a:dir == 0 && (MSFL(sel) <= a:linenr &&
+            \ MSLL(sel) >= a:linenr)
         return i
-      elseif a:dir == 1 && (multiselect#FL(sel) > a:linenr)
+      elseif a:dir == 1 && (MSFL(sel) > a:linenr)
         return i
-      elseif a:dir == -1 && (multiselect#LL(sel) >= a:linenr)
+      elseif a:dir == -1 && (MSLL(sel) >= a:linenr)
         " Inside selection
-        if multiselect#FL(sel) < a:linenr && multiselect#LL(sel) >= a:linenr
+        if MSFL(sel) < a:linenr && MSLL(sel) >= a:linenr
           return i
         else
           return i - 1
@@ -437,7 +437,7 @@ function! s:FindSelection(linenr, dir)
       let i = i + 1
     endfor
     " After the last selection
-    if a:dir == -1 && a:linenr > multiselect#LL(
+    if a:dir == -1 && a:linenr > MSLL(
           \ b:multiselRanges[len(b:multiselRanges)-1])
       return len(b:multiselRanges)-1
     endif
@@ -448,7 +448,7 @@ endfunction
 function! multiselect#NextSelection(dir) " {{{
   let selIdx = s:FindSelection(line('.'), a:dir)
   if selIdx != -1
-    exec multiselect#FL(b:multiselRanges[selIdx])
+    exec MSFL(b:multiselRanges[selIdx])
   endif
 endfunction " }}}
 
@@ -475,22 +475,22 @@ endfunction
 " Utilities }}}
 
 " Public interface {{{
-function! multiselect#FindSelection(linenr, dir)
+function! MSFindSelection(linenr, dir)
   return s:FindSelection(a:linenr, a:dir)
 endfunction
 
-function! multiselect#GetSelections()
+function! MSGetSelections()
   if !exists('b:multiselRanges')
     let b:multiselRanges = []
   endif
   return b:multiselRanges
 endfunction
 
-function! multiselect#SelectionExists()
-  return multiselect#NumberOfSelections() > 0
+function! MSSelectionExists()
+  return MSNumberOfSelections() > 0
 endfunction
 
-function! multiselect#NumberOfSelections()
+function! MSNumberOfSelections()
   if exists('b:multiselRanges')
     return len(b:multiselRanges)
   else
@@ -498,15 +498,15 @@ function! multiselect#NumberOfSelections()
   endif
 endfunction
 
-function! multiselect#FL(sel)
+function! MSFL(sel)
   return a:sel[0]
 endfunction
 
-function! multiselect#LL(sel)
+function! MSLL(sel)
   return a:sel[1]
 endfunction
 
-function! multiselect#IsExecuting()
+function! MSIsExecuting()
   return s:inExecution
 endfunction
 " Public interface }}}
